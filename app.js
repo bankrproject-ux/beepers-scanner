@@ -23,7 +23,6 @@ const NVDA_TOKEN =
 
 const ROBINHOOD_CHAIN = {
   chainId: "0x1237",
-
   chainName: "Robinhood Chain",
 
   nativeCurrency: {
@@ -85,15 +84,11 @@ const NFT_ABI = [
 // ============================================================
 
 let provider = null;
-
 let signer = null;
-
 let contract = null;
-
 let userAddress = null;
 
 let userBeepers = [];
-
 let selectedTokenId = null;
 
 
@@ -130,14 +125,31 @@ const scannerCard =
 
 
 // ============================================================
-// CONNECT WALLET
+// CONNECT / DISCONNECT BUTTON
 // ============================================================
 
 connectBtn.addEventListener(
   "click",
-  connectWallet
+  async () => {
+
+    // Already connected → disconnect
+    if (userAddress) {
+
+      disconnectWallet();
+      return;
+
+    }
+
+    // Not connected → connect
+    await connectWallet();
+
+  }
 );
 
+
+// ============================================================
+// CONNECT WALLET
+// ============================================================
 
 async function connectWallet() {
 
@@ -162,19 +174,13 @@ async function connectWallet() {
     );
 
 
-    // Request wallet connection
-
     await window.ethereum.request({
       method: "eth_requestAccounts"
     });
 
 
-    // Switch to Robinhood Chain
-
     await switchToRobinhood();
 
-
-    // Create ethers provider
 
     provider =
       new ethers.BrowserProvider(
@@ -190,8 +196,6 @@ async function connectWallet() {
       await signer.getAddress();
 
 
-    // Create scanner contract
-
     contract =
       new ethers.Contract(
         CONTRACT_ADDRESS,
@@ -199,8 +203,6 @@ async function connectWallet() {
         signer
       );
 
-
-    // Update wallet UI
 
     connectBtn.textContent =
       shortAddress(userAddress);
@@ -218,12 +220,8 @@ async function connectWallet() {
     );
 
 
-    // Check pool
-
     await updatePoolStatus();
 
-
-    // Load user's BEEPERS
 
     setScreen(
       "SCANNING...",
@@ -250,8 +248,8 @@ async function connectWallet() {
       signalStatus.className =
         "info-value danger";
 
-
       return;
+
     }
 
 
@@ -286,13 +284,87 @@ async function connectWallet() {
 
 
 // ============================================================
+// DISCONNECT WALLET
+// ============================================================
+
+function disconnectWallet() {
+
+  // Clear all wallet state
+
+  provider = null;
+  signer = null;
+  contract = null;
+  userAddress = null;
+
+  userBeepers = [];
+  selectedTokenId = null;
+
+
+  // Reset button
+
+  connectBtn.textContent =
+    "CONNECT WALLET";
+
+  connectBtn.classList.remove(
+    "connected"
+  );
+
+
+  // Reset wallet info
+
+  walletAddress.textContent =
+    "NOT CONNECTED";
+
+  walletAddress.className =
+    "info-value";
+
+
+  // Reset BEEPER selector
+
+  renderBeeperSelector([]);
+
+
+  // Reset pool
+
+  poolStatus.textContent =
+    "UNKNOWN";
+
+  poolStatus.className =
+    "info-value";
+
+
+  // Reset signal
+
+  signalStatus.textContent =
+    "--";
+
+  signalStatus.className =
+    "info-value";
+
+
+  // Reset scanner screen
+
+  setScreen(
+    "READY TO SCAN",
+    "CONNECT WALLET TO BEGIN",
+    "idle"
+  );
+
+
+  console.log(
+    "WALLET DISCONNECTED"
+  );
+
+}
+
+
+// ============================================================
 // LOAD USER BEEPERS
 // ============================================================
 
 async function loadUserBeepers() {
 
   userBeepers = [];
-
   selectedTokenId = null;
 
 
@@ -312,9 +384,6 @@ async function loadUserBeepers() {
 
   try {
 
-    // Check ERC721 Enumerable support
-    // 0x780e9d63 = ERC721Enumerable
-
     const supportsEnumerable =
       await nftContract.supportsInterface(
         "0x780e9d63"
@@ -330,8 +399,6 @@ async function loadUserBeepers() {
     }
 
 
-    // Get NFT balance
-
     const balance =
       await nftContract.balanceOf(
         userAddress
@@ -342,18 +409,13 @@ async function loadUserBeepers() {
       Number(balance);
 
 
-    // No NFTs
-
     if (total === 0) {
 
       renderBeeperSelector([]);
-
       return;
 
     }
 
-
-    // Get all token IDs owned
 
     for (
       let i = 0;
@@ -374,8 +436,6 @@ async function loadUserBeepers() {
 
     }
 
-
-    // Sort token IDs
 
     userBeepers.sort(
       (a, b) =>
@@ -416,31 +476,21 @@ function renderBeeperSelector(tokens) {
   }
 
 
-  // Create select element
-
   const selector =
     document.createElement("select");
 
-
-  // Keep same ID
 
   selector.id =
     "tokenIdInput";
 
 
-  // Preserve classes
-
   selector.className =
     tokenIdInput.className;
 
 
-  // Copy inline style if any
-
   selector.style.cssText =
     tokenIdInput.style.cssText;
 
-
-  // Make it visually match existing input
 
   selector.style.width =
     "100%";
@@ -473,10 +523,9 @@ function renderBeeperSelector(tokens) {
     "pointer";
 
 
-  // Empty option
-
   const placeholder =
     document.createElement("option");
+
 
   placeholder.value =
     "";
@@ -498,8 +547,6 @@ function renderBeeperSelector(tokens) {
   );
 
 
-  // Add every BEEPER
-
   for (
     const tokenId of tokens
   ) {
@@ -510,7 +557,6 @@ function renderBeeperSelector(tokens) {
 
     option.value =
       tokenId;
-
 
     option.textContent =
       `BEEPER #${tokenId}`;
@@ -523,8 +569,6 @@ function renderBeeperSelector(tokens) {
   }
 
 
-  // Replace manual input
-
   tokenIdInput.replaceWith(
     selector
   );
@@ -534,21 +578,16 @@ function renderBeeperSelector(tokens) {
     selector;
 
 
-  // If only one BEEPER, auto select it
-
   if (tokens.length === 1) {
 
     selector.value =
       tokens[0];
-
 
     selectedTokenId =
       tokens[0];
 
   }
 
-
-  // Selection event
 
   selector.addEventListener(
     "change",
@@ -643,8 +682,6 @@ async function scanBeeper() {
 
   try {
 
-    // Wallet check
-
     if (
       !contract ||
       !signer
@@ -659,8 +696,6 @@ async function scanBeeper() {
       return;
     }
 
-
-    // Selected BEEPER check
 
     const tokenId =
       selectedTokenId ||
@@ -678,8 +713,6 @@ async function scanBeeper() {
       return;
     }
 
-
-    // Disable button
 
     scanBtn.disabled =
       true;
@@ -703,17 +736,12 @@ async function scanBeeper() {
     signalStatus.textContent =
       "SCANNING";
 
-
     signalStatus.className =
       "info-value active";
 
 
-    // Scanner effect
-
     await sleep(1200);
 
-
-    // Verify NFT ownership
 
     const readProvider =
       new ethers.JsonRpcProvider(
@@ -748,8 +776,6 @@ async function scanBeeper() {
     }
 
 
-    // Ownership check
-
     if (
       nftOwner.toLowerCase() !==
       userAddress.toLowerCase()
@@ -765,17 +791,13 @@ async function scanBeeper() {
       signalStatus.textContent =
         "NO SIGNAL";
 
-
       signalStatus.className =
         "info-value danger";
-
 
       return;
 
     }
 
-
-    // Check if NFT already won
 
     const eligible =
       await contract.isEligible(
@@ -798,17 +820,13 @@ async function scanBeeper() {
       signalStatus.textContent =
         "NO SIGNAL";
 
-
       signalStatus.className =
         "info-value danger";
-
 
       return;
 
     }
 
-
-    // Send scan transaction
 
     setScreen(
       "SCANNING...",
@@ -830,15 +848,9 @@ async function scanBeeper() {
     );
 
 
-    // Wait confirmation
-
     const receipt =
       await tx.wait();
 
-
-    // ========================================================
-    // CHECK EVENTS
-    // ========================================================
 
     let signalDetected =
       false;
@@ -868,7 +880,6 @@ async function scanBeeper() {
           signalDetected =
             true;
 
-
           reward =
             parsed.args.reward;
 
@@ -882,10 +893,6 @@ async function scanBeeper() {
 
     }
 
-
-    // ========================================================
-    // WINNER
-    // ========================================================
 
     if (signalDetected) {
 
@@ -901,7 +908,6 @@ async function scanBeeper() {
 
       signalStatus.textContent =
         "DETECTED";
-
 
       signalStatus.className =
         "info-value active";
@@ -921,10 +927,6 @@ async function scanBeeper() {
     }
 
 
-    // ========================================================
-    // NO SIGNAL
-    // ========================================================
-
     await sleep(700);
 
 
@@ -937,7 +939,6 @@ async function scanBeeper() {
 
     signalStatus.textContent =
       "NO SIGNAL";
-
 
     signalStatus.className =
       "info-value danger";
@@ -975,7 +976,6 @@ async function scanBeeper() {
 
     signalStatus.textContent =
       "NO SIGNAL";
-
 
     signalStatus.className =
       "info-value danger";
@@ -1030,7 +1030,6 @@ async function updatePoolStatus() {
       poolStatus.textContent =
         "ACTIVE";
 
-
       poolStatus.className =
         "info-value active";
 
@@ -1038,7 +1037,6 @@ async function updatePoolStatus() {
 
       poolStatus.textContent =
         "SCANNING";
-
 
       poolStatus.className =
         "info-value";
@@ -1083,9 +1081,7 @@ function setScreen(
   );
 
 
-  if (
-    type === "scanning"
-  ) {
+  if (type === "scanning") {
 
     scannerCard.classList.add(
       "scanning"
@@ -1094,9 +1090,7 @@ function setScreen(
   }
 
 
-  if (
-    type === "success"
-  ) {
+  if (type === "success") {
 
     screenStatus.style.color =
       "#14200f";
@@ -1104,9 +1098,7 @@ function setScreen(
   }
 
 
-  if (
-    type === "error"
-  ) {
+  if (type === "error") {
 
     screenStatus.style.color =
       "#172011";
@@ -1143,9 +1135,7 @@ function sleep(ms) {
 
 function getErrorMessage(error) {
 
-  if (
-    error?.shortMessage
-  ) {
+  if (error?.shortMessage) {
 
     return error.shortMessage
       .toUpperCase();
@@ -1153,9 +1143,7 @@ function getErrorMessage(error) {
   }
 
 
-  if (
-    error?.message
-  ) {
+  if (error?.message) {
 
     return error.message
       .slice(0, 70)
@@ -1180,7 +1168,7 @@ setInterval(
 
 
 // ============================================================
-// WALLET ACCOUNT CHANGED
+// WALLET EVENTS
 // ============================================================
 
 if (window.ethereum) {
@@ -1189,100 +1177,62 @@ if (window.ethereum) {
     "accountsChanged",
     async accounts => {
 
-      if (
-        accounts.length === 0
-      ) {
+      if (accounts.length === 0) {
 
-        userAddress =
-          null;
+        disconnectWallet();
+        return;
 
-        contract =
-          null;
-
-        signer =
-          null;
-
-        userBeepers =
-          [];
-
-        selectedTokenId =
-          null;
+      }
 
 
-        connectBtn.textContent =
-          "CONNECT WALLET";
+      // If website is currently disconnected,
+      // don't auto reconnect
+
+      if (!userAddress) {
+        return;
+      }
 
 
-        connectBtn.classList.remove(
-          "connected"
-        );
+      userAddress =
+        accounts[0];
 
 
-        walletAddress.textContent =
-          "NOT CONNECTED";
+      walletAddress.textContent =
+        shortAddress(userAddress);
 
 
-        setScreen(
-          "READY",
-          "CONNECT WALLET TO BEGIN",
-          "idle"
-        );
+      connectBtn.textContent =
+        shortAddress(userAddress);
 
 
-      } else {
+      try {
 
-        // Reconnect with new account
-
-        userAddress =
-          accounts[0];
+        await loadUserBeepers();
 
 
-        walletAddress.textContent =
-          shortAddress(
-            userAddress
+        if (
+          userBeepers.length > 0
+        ) {
+
+          setScreen(
+            "READY",
+            "SELECT A BEEPER TO SCAN",
+            "success"
           );
 
+        } else {
 
-        connectBtn.textContent =
-          shortAddress(
-            userAddress
+          setScreen(
+            "NO BEEPERS",
+            "NO BEEPERS DETECTED",
+            "error"
           );
-
-
-        if (contract) {
-
-          try {
-
-            await loadUserBeepers();
-
-
-            if (
-              userBeepers.length > 0
-            ) {
-
-              setScreen(
-                "READY",
-                "SELECT A BEEPER TO SCAN",
-                "success"
-              );
-
-            } else {
-
-              setScreen(
-                "NO BEEPERS",
-                "NO BEEPERS DETECTED",
-                "error"
-              );
-
-            }
-
-          } catch (error) {
-
-            console.error(error);
-
-          }
 
         }
+
+      } catch (error) {
+
+        console.error(error);
 
       }
 
@@ -1294,7 +1244,11 @@ if (window.ethereum) {
     "chainChanged",
     () => {
 
-      window.location.reload();
+      // Only reload if currently connected
+
+      if (userAddress) {
+        window.location.reload();
+      }
 
     }
   );
