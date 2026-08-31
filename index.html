@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>BEEPERS Scanner</title>
+
+  <link rel="stylesheet" href="style.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+</head>
+
+<body>
+
+  <div class="noise"></div>
+
+  <main class="container">
+
+    <!-- HEADER -->
+
+    <header class="header">
+      <div class="logo">
+        <span class="logo-dot"></span>
+        BEEPERS
+      </div>
+
+      <button id="connectBtn" class="connect-btn">
+        CONNECT WALLET
+      </button>
+    </header>
+
+
+    <!-- HERO -->
+
+    <section class="hero">
+
+      <div class="eyebrow">
+        BEEP CORP // SIGNAL TERMINAL
+      </div>
+
+      <h1>
+        SCAN YOUR<br />
+        <span>BEEPER.</span>
+      </h1>
+
+      <p class="subtitle">
+        Something might be transmitting.
+      </p>
+
+    </section>
+
+
+    <!-- SCANNER -->
+
+    <section class="scanner-card">
+
+      <div class="scanner-top">
+
+        <div>
+          <div class="terminal-label">
+            BEEPER IDENTIFICATION
+          </div>
+
+          <div class="terminal-title">
+            SIGNAL SCANNER
+          </div>
+        </div>
+
+        <div class="status-light">
+          <span></span>
+          SYSTEM ONLINE
+        </div>
+
+      </div>
+
+
+      <!-- SCREEN -->
+
+      <div class="screen">
+
+        <div class="screen-grid"></div>
+
+        <div id="screenStatus" class="screen-status">
+          READY TO SCAN
+        </div>
+
+        <div id="screenMessage" class="screen-message">
+          CONNECT WALLET TO BEGIN
+        </div>
+
+        <div class="screen-lines">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+      </div>
+
+
+      <!-- INPUT -->
+
+      <div class="input-section">
+
+        <label>
+          BEEPER TOKEN ID
+        </label>
+
+        <div class="input-row">
+
+          <input
+            id="tokenIdInput"
+            type="number"
+            placeholder="ENTER TOKEN ID"
+            min="0"
+          />
+
+          <button id="scanBtn">
+            SCAN
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- INFO -->
+
+      <div class="scanner-info">
+
+        <div class="info-item">
+          <span class="info-label">
+            WALLET
+          </span>
+
+          <span id="walletAddress" class="info-value">
+            NOT CONNECTED
+          </span>
+        </div>
+
+        <div class="info-item">
+          <span class="info-label">
+            POOL STATUS
+          </span>
+
+          <span id="poolStatus" class="info-value">
+            UNKNOWN
+          </span>
+        </div>
+
+        <div class="info-item">
+          <span class="info-label">
+            SIGNAL
+          </span>
+
+          <span id="signalStatus" class="info-value">
+            --
+          </span>
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- FOOTER -->
+
+    <footer>
+
+      <div>
+        BEEP CORP © 2026
+      </div>
+
+      <div class="footer-right">
+        ROBINHOOD NETWORK
+      </div>
+
+    </footer>
+
+  </main>
+
+
+  <script src="app.js"></script>
+
+</body>
+</html>
