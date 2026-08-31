@@ -87,12 +87,16 @@ const NFT_ABI = [
 let provider = null;
 let signer = null;
 let contract = null;
+
 let userAddress = null;
 
 let userBeepers = [];
 let selectedTokenId = null;
 
 let disconnectBtn = null;
+
+let isConnecting = false;
+let intentionallyDisconnected = false;
 
 
 // ============================================================
@@ -133,9 +137,11 @@ const scannerCard =
 
 function createDisconnectButton() {
 
-  // Don't create twice
-
   if (disconnectBtn) {
+    return;
+  }
+
+  if (!connectBtn) {
     return;
   }
 
@@ -146,6 +152,10 @@ function createDisconnectButton() {
 
   disconnectBtn.id =
     "disconnectBtn";
+
+
+  disconnectBtn.type =
+    "button";
 
 
   disconnectBtn.textContent =
@@ -184,6 +194,10 @@ function createDisconnectButton() {
     "11px";
 
 
+  disconnectBtn.style.fontWeight =
+    "600";
+
+
   disconnectBtn.style.letterSpacing =
     "2px";
 
@@ -192,8 +206,16 @@ function createDisconnectButton() {
     "pointer";
 
 
-  disconnectBtn.style.transition =
-    "all 0.2s ease";
+  disconnectBtn.style.whiteSpace =
+    "nowrap";
+
+
+  disconnectBtn.style.position =
+    "relative";
+
+
+  disconnectBtn.style.zIndex =
+    "999";
 
 
   disconnectBtn.addEventListener(
@@ -220,20 +242,23 @@ function createDisconnectButton() {
 
   disconnectBtn.addEventListener(
     "click",
-    disconnectWallet
+    event => {
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      disconnectWallet();
+
+    }
   );
 
 
-  // Put button after connect button
+  // Insert next to connect button
 
-  if (connectBtn) {
-
-    connectBtn.insertAdjacentElement(
-      "afterend",
-      disconnectBtn
-    );
-
-  }
+  connectBtn.insertAdjacentElement(
+    "afterend",
+    disconnectBtn
+  );
 
 }
 
@@ -242,22 +267,28 @@ function createDisconnectButton() {
 // CONNECT BUTTON
 // ============================================================
 
-connectBtn.addEventListener(
-  "click",
-  async () => {
+if (connectBtn) {
 
-    // If already connected,
-    // don't reconnect
+  connectBtn.addEventListener(
+    "click",
+    async () => {
 
-    if (userAddress) {
-      return;
+      if (isConnecting) {
+        return;
+      }
+
+
+      if (userAddress) {
+        return;
+      }
+
+
+      await connectWallet();
+
     }
+  );
 
-
-    await connectWallet();
-
-  }
-);
+}
 
 
 // ============================================================
@@ -265,6 +296,16 @@ connectBtn.addEventListener(
 // ============================================================
 
 async function connectWallet() {
+
+  if (isConnecting) {
+    return;
+  }
+
+
+  isConnecting = true;
+
+  intentionallyDisconnected = false;
+
 
   try {
 
@@ -288,14 +329,24 @@ async function connectWallet() {
     );
 
 
-    // Request wallet
+    // Request accounts
 
-    await window.ethereum.request({
-      method: "eth_requestAccounts"
-    });
+    const accounts =
+      await window.ethereum.request({
+        method: "eth_requestAccounts"
+      });
 
 
-    // Switch network
+    if (!accounts || accounts.length === 0) {
+
+      throw new Error(
+        "NO WALLET ACCOUNT FOUND"
+      );
+
+    }
+
+
+    // Switch chain
 
     await switchToRobinhood();
 
@@ -308,19 +359,13 @@ async function connectWallet() {
       );
 
 
-    // Get signer
-
     signer =
       await provider.getSigner();
 
 
-    // Get address
-
     userAddress =
       await signer.getAddress();
 
-
-    // Create contract
 
     contract =
       new ethers.Contract(
@@ -332,13 +377,17 @@ async function connectWallet() {
 
     // Update connect button
 
-    connectBtn.textContent =
-      shortAddress(userAddress);
+    if (connectBtn) {
+
+      connectBtn.textContent =
+        shortAddress(userAddress);
 
 
-    connectBtn.classList.add(
-      "connected"
-    );
+      connectBtn.classList.add(
+        "connected"
+      );
+
+    }
 
 
     // Show disconnect button
@@ -351,7 +400,7 @@ async function connectWallet() {
     }
 
 
-    // Update wallet info
+    // Update wallet display
 
     if (walletAddress) {
 
@@ -366,12 +415,13 @@ async function connectWallet() {
     }
 
 
-    // Update pool
+    // Pool status
 
     await updatePoolStatus();
 
 
-    // Start BEEPER detection
+    // Wallet is already connected at this point.
+    // NFT loading failure MUST NOT disconnect wallet.
 
     setScreen(
       "SCANNING...",
@@ -380,12 +430,28 @@ async function connectWallet() {
     );
 
 
-    // Load NFTs
+    try {
 
-    await loadUserBeepers();
+      await loadUserBeepers();
+
+    } catch (error) {
+
+      console.warn(
+        "BEEPER LOAD ERROR:",
+        error
+      );
+
+      // Keep wallet connected.
+      // Collection may not be minted yet.
+
+      userBeepers = [];
+
+      renderBeeperSelector([]);
+
+    }
 
 
-    // No NFTs
+    // Check result
 
     if (userBeepers.length === 0) {
 
@@ -412,8 +478,6 @@ async function connectWallet() {
 
     }
 
-
-    // Success
 
     setScreen(
       "READY",
@@ -442,7 +506,35 @@ async function connectWallet() {
     );
 
 
-    disconnectWallet();
+    // IMPORTANT:
+    // Only reset if connection itself failed.
+    // Don't call disconnectWallet() here.
+
+    provider = null;
+    signer = null;
+    contract = null;
+    userAddress = null;
+
+
+    if (connectBtn) {
+
+      connectBtn.textContent =
+        "CONNECT WALLET";
+
+
+      connectBtn.classList.remove(
+        "connected"
+      );
+
+    }
+
+
+    if (disconnectBtn) {
+
+      disconnectBtn.style.display =
+        "none";
+
+    }
 
 
     setScreen(
@@ -450,6 +542,11 @@ async function connectWallet() {
       getErrorMessage(error),
       "error"
     );
+
+
+  } finally {
+
+    isConnecting = false;
 
   }
 
@@ -462,38 +559,18 @@ async function connectWallet() {
 
 function disconnectWallet() {
 
-  console.log(
-    "DISCONNECTING WALLET"
-  );
+  intentionallyDisconnected = true;
 
 
-  // Clear provider
+  // Clear app session only
 
   provider = null;
-
-
-  // Clear signer
-
   signer = null;
-
-
-  // Clear contract
-
   contract = null;
-
-
-  // Clear address
 
   userAddress = null;
 
-
-  // Clear NFTs
-
   userBeepers = [];
-
-
-  // Clear selected token
-
   selectedTokenId = null;
 
 
@@ -522,7 +599,7 @@ function disconnectWallet() {
   }
 
 
-  // Reset wallet info
+  // Reset wallet display
 
   if (walletAddress) {
 
@@ -537,7 +614,7 @@ function disconnectWallet() {
   }
 
 
-  // Reset NFT selector
+  // Reset selector
 
   renderBeeperSelector([]);
 
@@ -570,7 +647,7 @@ function disconnectWallet() {
   }
 
 
-  // Reset scanner
+  // Reset screen
 
   setScreen(
     "READY TO SCAN",
@@ -580,7 +657,7 @@ function disconnectWallet() {
 
 
   console.log(
-    "WALLET DISCONNECTED"
+    "APP WALLET SESSION DISCONNECTED"
   );
 
 }
@@ -689,15 +766,15 @@ async function loadUserBeepers() {
 
   } catch (error) {
 
-    console.error(
+    console.warn(
       "BEEPER LOAD ERROR:",
       error
     );
 
 
-    renderBeeperSelector([]);
+    userBeepers = [];
 
-    throw error;
+    renderBeeperSelector([]);
 
   }
 
@@ -836,7 +913,7 @@ function renderBeeperSelector(tokens) {
     selector;
 
 
-  // Auto select if only one
+  // Auto select if only one NFT
 
   if (tokens.length === 1) {
 
@@ -917,8 +994,6 @@ async function switchToRobinhood() {
 
   } catch (error) {
 
-    // Chain not added
-
     if (error.code === 4902) {
 
       await window.ethereum.request({
@@ -947,10 +1022,14 @@ async function switchToRobinhood() {
 // SCAN
 // ============================================================
 
-scanBtn.addEventListener(
-  "click",
-  scanBeeper
-);
+if (scanBtn) {
+
+  scanBtn.addEventListener(
+    "click",
+    scanBeeper
+  );
+
+}
 
 
 async function scanBeeper() {
@@ -976,7 +1055,7 @@ async function scanBeeper() {
 
     const tokenId =
       selectedTokenId ||
-      tokenIdInput.value;
+      tokenIdInput?.value;
 
 
     if (!tokenId) {
@@ -1028,9 +1107,6 @@ async function scanBeeper() {
     }
 
 
-    await sleep(1000);
-
-
     const readProvider =
       new ethers.JsonRpcProvider(
         ROBINHOOD_CHAIN.rpcUrls[0]
@@ -1045,23 +1121,10 @@ async function scanBeeper() {
       );
 
 
-    let nftOwner;
-
-
-    try {
-
-      nftOwner =
-        await nftContract.ownerOf(
-          BigInt(tokenId)
-        );
-
-    } catch (error) {
-
-      throw new Error(
-        "BEEPER NOT FOUND"
+    const nftOwner =
+      await nftContract.ownerOf(
+        BigInt(tokenId)
       );
-
-    }
 
 
     if (
@@ -1069,26 +1132,9 @@ async function scanBeeper() {
       userAddress.toLowerCase()
     ) {
 
-      setScreen(
-        "NO SIGNAL",
-        "BEEPER NOT DETECTED",
-        "error"
+      throw new Error(
+        "BEEPER NOT OWNED"
       );
-
-
-      if (signalStatus) {
-
-        signalStatus.textContent =
-          "NO SIGNAL";
-
-
-        signalStatus.className =
-          "info-value danger";
-
-      }
-
-
-      return;
 
     }
 
@@ -1146,10 +1192,6 @@ async function scanBeeper() {
       false;
 
 
-    let reward =
-      0n;
-
-
     for (
       const log of receipt.logs
     ) {
@@ -1171,13 +1213,9 @@ async function scanBeeper() {
           signalDetected =
             true;
 
-
-          reward =
-            parsed.args.reward;
-
         }
 
-      } catch (error) {
+      } catch {
 
         // Ignore unrelated logs
 
@@ -1207,35 +1245,25 @@ async function scanBeeper() {
       }
 
 
-      await updatePoolStatus();
+    } else {
 
-
-      console.log(
-        "REWARD:",
-        reward.toString()
+      setScreen(
+        "NO SIGNAL",
+        "NOTHING DETECTED",
+        "error"
       );
 
 
-      return;
+      if (signalStatus) {
 
-    }
-
-
-    setScreen(
-      "NO SIGNAL",
-      "NOTHING DETECTED",
-      "error"
-    );
+        signalStatus.textContent =
+          "NO SIGNAL";
 
 
-    if (signalStatus) {
+        signalStatus.className =
+          "info-value danger";
 
-      signalStatus.textContent =
-        "NO SIGNAL";
-
-
-      signalStatus.className =
-        "info-value danger";
+      }
 
     }
 
@@ -1296,12 +1324,16 @@ async function scanBeeper() {
     }
 
 
-    scanBtn.disabled =
-      false;
+    if (scanBtn) {
+
+      scanBtn.disabled =
+        false;
 
 
-    scanBtn.textContent =
-      "SCAN";
+      scanBtn.textContent =
+        "SCAN";
+
+    }
 
   }
 
@@ -1361,7 +1393,7 @@ async function updatePoolStatus() {
 
   } catch (error) {
 
-    console.error(
+    console.warn(
       "POOL ERROR:",
       error
     );
@@ -1444,16 +1476,6 @@ function shortAddress(address) {
 }
 
 
-function sleep(ms) {
-
-  return new Promise(
-    resolve =>
-      setTimeout(resolve, ms)
-  );
-
-}
-
-
 function getErrorMessage(error) {
 
   if (error?.shortMessage) {
@@ -1503,15 +1525,26 @@ setInterval(
 
 if (window.ethereum) {
 
+
   // Account changed
 
   window.ethereum.on(
     "accountsChanged",
     async accounts => {
 
-      // Wallet disconnected from extension
+      if (
+        intentionallyDisconnected
+      ) {
 
-      if (accounts.length === 0) {
+        return;
+
+      }
+
+
+      if (
+        !accounts ||
+        accounts.length === 0
+      ) {
 
         disconnectWallet();
 
@@ -1520,15 +1553,20 @@ if (window.ethereum) {
       }
 
 
-      // Website intentionally disconnected
-      // Don't reconnect automatically
+      // Ignore account event while initial
+      // connection is still happening
+
+      if (isConnecting) {
+        return;
+      }
+
+
+      // Ignore if app isn't connected
 
       if (!userAddress) {
         return;
       }
 
-
-      // Account changed
 
       try {
 
@@ -1554,8 +1592,12 @@ if (window.ethereum) {
           );
 
 
-        connectBtn.textContent =
-          shortAddress(userAddress);
+        if (connectBtn) {
+
+          connectBtn.textContent =
+            shortAddress(userAddress);
+
+        }
 
 
         if (walletAddress) {
@@ -1566,7 +1608,15 @@ if (window.ethereum) {
         }
 
 
-        await loadUserBeepers();
+        try {
+
+          await loadUserBeepers();
+
+        } catch {
+
+          // Keep wallet connected
+
+        }
 
 
         await updatePoolStatus();
@@ -1585,27 +1635,23 @@ if (window.ethereum) {
   );
 
 
-  // Network changed
-  // IMPORTANT: DO NOT RELOAD PAGE
+  // Chain changed
 
   window.ethereum.on(
     "chainChanged",
     async chainId => {
 
-      console.log(
-        "NETWORK CHANGED:",
-        chainId
-      );
+      // NEVER reload page
 
+      if (isConnecting) {
+        return;
+      }
 
-      // Don't do anything if app disconnected
 
       if (!userAddress) {
         return;
       }
 
-
-      // If user leaves Robinhood
 
       if (
         chainId.toLowerCase() !==
@@ -1618,14 +1664,10 @@ if (window.ethereum) {
           "error"
         );
 
-
         return;
 
       }
 
-
-      // Recreate provider after chain switch
-      // WITHOUT refreshing page
 
       try {
 
@@ -1651,8 +1693,12 @@ if (window.ethereum) {
           await signer.getAddress();
 
 
-        connectBtn.textContent =
-          shortAddress(userAddress);
+        if (connectBtn) {
+
+          connectBtn.textContent =
+            shortAddress(userAddress);
+
+        }
 
 
         if (walletAddress) {
@@ -1674,18 +1720,13 @@ if (window.ethereum) {
         await updatePoolStatus();
 
 
-        await loadUserBeepers();
+        try {
 
+          await loadUserBeepers();
 
-        if (
-          userBeepers.length > 0
-        ) {
+        } catch {
 
-          setScreen(
-            "READY",
-            "SELECT A BEEPER TO SCAN",
-            "success"
-          );
+          // Keep wallet connected
 
         }
 
