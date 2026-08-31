@@ -23,15 +23,19 @@ const NVDA_TOKEN =
 
 const ROBINHOOD_CHAIN = {
   chainId: "0x1237",
+
   chainName: "Robinhood Chain",
+
   nativeCurrency: {
     name: "ETH",
     symbol: "ETH",
     decimals: 18
   },
+
   rpcUrls: [
     "https://rpc.mainnet.chain.robinhood.com"
   ],
+
   blockExplorerUrls: [
     "https://robinhoodchain.blockscout.com"
   ]
@@ -65,7 +69,13 @@ const CONTRACT_ABI = [
 
 const NFT_ABI = [
 
-  "function ownerOf(uint256 tokenId) external view returns (address)"
+  "function ownerOf(uint256 tokenId) external view returns (address)",
+
+  "function balanceOf(address owner) external view returns (uint256)",
+
+  "function tokenOfOwnerByIndex(address owner, uint256 index) external view returns (uint256)",
+
+  "function supportsInterface(bytes4 interfaceId) external view returns (bool)"
 
 ];
 
@@ -75,9 +85,16 @@ const NFT_ABI = [
 // ============================================================
 
 let provider = null;
+
 let signer = null;
+
 let contract = null;
+
 let userAddress = null;
+
+let userBeepers = [];
+
+let selectedTokenId = null;
 
 
 // ============================================================
@@ -90,7 +107,7 @@ const connectBtn =
 const scanBtn =
   document.getElementById("scanBtn");
 
-const tokenIdInput =
+let tokenIdInput =
   document.getElementById("tokenIdInput");
 
 const screenStatus =
@@ -173,7 +190,7 @@ async function connectWallet() {
       await signer.getAddress();
 
 
-    // Create contract instance
+    // Create scanner contract
 
     contract =
       new ethers.Contract(
@@ -183,7 +200,7 @@ async function connectWallet() {
       );
 
 
-    // Update UI
+    // Update wallet UI
 
     connectBtn.textContent =
       shortAddress(userAddress);
@@ -201,9 +218,46 @@ async function connectWallet() {
     );
 
 
+    // Check pool
+
+    await updatePoolStatus();
+
+
+    // Load user's BEEPERS
+
+    setScreen(
+      "SCANNING...",
+      "DETECTING BEEPERS",
+      "scanning"
+    );
+
+
+    await loadUserBeepers();
+
+
+    if (userBeepers.length === 0) {
+
+      setScreen(
+        "NO BEEPERS",
+        "NO BEEPERS DETECTED",
+        "error"
+      );
+
+
+      signalStatus.textContent =
+        "NO SIGNAL";
+
+      signalStatus.className =
+        "info-value danger";
+
+
+      return;
+    }
+
+
     setScreen(
       "READY",
-      "ENTER A BEEPER TOKEN ID",
+      "SELECT A BEEPER TO SCAN",
       "success"
     );
 
@@ -211,19 +265,14 @@ async function connectWallet() {
     signalStatus.textContent =
       "STANDING BY";
 
-
     signalStatus.className =
       "info-value active";
-
-
-    // Check pool
-
-    await updatePoolStatus();
 
 
   } catch (error) {
 
     console.error(error);
+
 
     setScreen(
       "CONNECTION FAILED",
@@ -232,6 +281,302 @@ async function connectWallet() {
     );
 
   }
+
+}
+
+
+// ============================================================
+// LOAD USER BEEPERS
+// ============================================================
+
+async function loadUserBeepers() {
+
+  userBeepers = [];
+
+  selectedTokenId = null;
+
+
+  const readProvider =
+    new ethers.JsonRpcProvider(
+      ROBINHOOD_CHAIN.rpcUrls[0]
+    );
+
+
+  const nftContract =
+    new ethers.Contract(
+      BEEPERS_NFT,
+      NFT_ABI,
+      readProvider
+    );
+
+
+  try {
+
+    // Check ERC721 Enumerable support
+    // 0x780e9d63 = ERC721Enumerable
+
+    const supportsEnumerable =
+      await nftContract.supportsInterface(
+        "0x780e9d63"
+      );
+
+
+    if (!supportsEnumerable) {
+
+      throw new Error(
+        "COLLECTION INDEX UNAVAILABLE"
+      );
+
+    }
+
+
+    // Get NFT balance
+
+    const balance =
+      await nftContract.balanceOf(
+        userAddress
+      );
+
+
+    const total =
+      Number(balance);
+
+
+    // No NFTs
+
+    if (total === 0) {
+
+      renderBeeperSelector([]);
+
+      return;
+
+    }
+
+
+    // Get all token IDs owned
+
+    for (
+      let i = 0;
+      i < total;
+      i++
+    ) {
+
+      const tokenId =
+        await nftContract.tokenOfOwnerByIndex(
+          userAddress,
+          i
+        );
+
+
+      userBeepers.push(
+        tokenId.toString()
+      );
+
+    }
+
+
+    // Sort token IDs
+
+    userBeepers.sort(
+      (a, b) =>
+        Number(a) - Number(b)
+    );
+
+
+    renderBeeperSelector(
+      userBeepers
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "BEEPER LOAD ERROR:",
+      error
+    );
+
+
+    renderBeeperSelector([]);
+
+    throw error;
+
+  }
+
+}
+
+
+// ============================================================
+// RENDER BEEPER SELECTOR
+// ============================================================
+
+function renderBeeperSelector(tokens) {
+
+  if (!tokenIdInput) {
+    return;
+  }
+
+
+  // Create select element
+
+  const selector =
+    document.createElement("select");
+
+
+  // Keep same ID
+
+  selector.id =
+    "tokenIdInput";
+
+
+  // Preserve classes
+
+  selector.className =
+    tokenIdInput.className;
+
+
+  // Copy inline style if any
+
+  selector.style.cssText =
+    tokenIdInput.style.cssText;
+
+
+  // Make it visually match existing input
+
+  selector.style.width =
+    "100%";
+
+  selector.style.height =
+    "100%";
+
+  selector.style.background =
+    "transparent";
+
+  selector.style.color =
+    "inherit";
+
+  selector.style.border =
+    "none";
+
+  selector.style.outline =
+    "none";
+
+  selector.style.font =
+    "inherit";
+
+  selector.style.letterSpacing =
+    "inherit";
+
+  selector.style.textTransform =
+    "uppercase";
+
+  selector.style.cursor =
+    "pointer";
+
+
+  // Empty option
+
+  const placeholder =
+    document.createElement("option");
+
+  placeholder.value =
+    "";
+
+  placeholder.textContent =
+    tokens.length
+      ? "SELECT BEEPER"
+      : "NO BEEPERS FOUND";
+
+  placeholder.disabled =
+    true;
+
+  placeholder.selected =
+    true;
+
+
+  selector.appendChild(
+    placeholder
+  );
+
+
+  // Add every BEEPER
+
+  for (
+    const tokenId of tokens
+  ) {
+
+    const option =
+      document.createElement("option");
+
+
+    option.value =
+      tokenId;
+
+
+    option.textContent =
+      `BEEPER #${tokenId}`;
+
+
+    selector.appendChild(
+      option
+    );
+
+  }
+
+
+  // Replace manual input
+
+  tokenIdInput.replaceWith(
+    selector
+  );
+
+
+  tokenIdInput =
+    selector;
+
+
+  // If only one BEEPER, auto select it
+
+  if (tokens.length === 1) {
+
+    selector.value =
+      tokens[0];
+
+
+    selectedTokenId =
+      tokens[0];
+
+  }
+
+
+  // Selection event
+
+  selector.addEventListener(
+    "change",
+    () => {
+
+      selectedTokenId =
+        selector.value || null;
+
+
+      if (selectedTokenId) {
+
+        setScreen(
+          "READY",
+          `BEEPER #${selectedTokenId} LOCKED`,
+          "success"
+        );
+
+
+        signalStatus.textContent =
+          "STANDING BY";
+
+        signalStatus.className =
+          "info-value active";
+
+      }
+
+    }
+  );
 
 }
 
@@ -250,7 +595,8 @@ async function switchToRobinhood() {
 
       params: [
         {
-          chainId: ROBINHOOD_CHAIN.chainId
+          chainId:
+            ROBINHOOD_CHAIN.chainId
         }
       ]
 
@@ -258,9 +604,9 @@ async function switchToRobinhood() {
 
   } catch (error) {
 
-    // Chain not added yet
-
-    if (error.code === 4902) {
+    if (
+      error.code === 4902
+    ) {
 
       await window.ethereum.request({
 
@@ -299,7 +645,10 @@ async function scanBeeper() {
 
     // Wallet check
 
-    if (!contract || !signer) {
+    if (
+      !contract ||
+      !signer
+    ) {
 
       setScreen(
         "NO CONNECTION",
@@ -311,32 +660,18 @@ async function scanBeeper() {
     }
 
 
-    // Token ID check
+    // Selected BEEPER check
 
     const tokenId =
-      tokenIdInput.value.trim();
+      selectedTokenId ||
+      tokenIdInput.value;
 
 
     if (!tokenId) {
 
       setScreen(
-        "INPUT REQUIRED",
-        "ENTER A BEEPER TOKEN ID",
-        "error"
-      );
-
-      return;
-    }
-
-
-    if (
-      isNaN(tokenId) ||
-      Number(tokenId) < 0
-    ) {
-
-      setScreen(
-        "INVALID ID",
-        "ENTER A VALID TOKEN ID",
+        "NO BEEPER SELECTED",
+        "SELECT A BEEPER FIRST",
         "error"
       );
 
@@ -346,13 +681,12 @@ async function scanBeeper() {
 
     // Disable button
 
-    scanBtn.disabled = true;
+    scanBtn.disabled =
+      true;
 
     scanBtn.textContent =
       "SCANNING...";
 
-
-    // Start visual scan
 
     scannerCard.classList.add(
       "scanning"
@@ -374,12 +708,12 @@ async function scanBeeper() {
       "info-value active";
 
 
-    // Small delay for scanner effect
+    // Scanner effect
 
     await sleep(1200);
 
 
-    // Verify NFT ownership first
+    // Verify NFT ownership
 
     const readProvider =
       new ethers.JsonRpcProvider(
@@ -414,6 +748,8 @@ async function scanBeeper() {
     }
 
 
+    // Ownership check
+
     if (
       nftOwner.toLowerCase() !==
       userAddress.toLowerCase()
@@ -425,20 +761,21 @@ async function scanBeeper() {
         "error"
       );
 
+
       signalStatus.textContent =
         "NO SIGNAL";
 
+
       signalStatus.className =
         "info-value danger";
+
 
       return;
 
     }
 
 
-    // Check if this NFT already won
-    // We intentionally display NO SIGNAL
-    // instead of exposing winner status.
+    // Check if NFT already won
 
     const eligible =
       await contract.isEligible(
@@ -493,7 +830,7 @@ async function scanBeeper() {
     );
 
 
-    // Wait transaction confirmation
+    // Wait confirmation
 
     const receipt =
       await tx.wait();
@@ -503,8 +840,11 @@ async function scanBeeper() {
     // CHECK EVENTS
     // ========================================================
 
-    let signalDetected = false;
-    let reward = 0n;
+    let signalDetected =
+      false;
+
+    let reward =
+      0n;
 
 
     for (
@@ -525,7 +865,9 @@ async function scanBeeper() {
             "SignalDetected"
         ) {
 
-          signalDetected = true;
+          signalDetected =
+            true;
+
 
           reward =
             parsed.args.reward;
@@ -565,12 +907,8 @@ async function scanBeeper() {
         "info-value active";
 
 
-      // Update pool
-
       await updatePoolStatus();
 
-
-      // Console reward for debugging
 
       console.log(
         "WINNER REWARD:",
@@ -605,8 +943,6 @@ async function scanBeeper() {
       "info-value danger";
 
 
-    // Update pool
-
     await updatePoolStatus();
 
 
@@ -614,9 +950,6 @@ async function scanBeeper() {
 
     console.error(error);
 
-
-    // Don't expose contract errors
-    // Keep the mystery aesthetic
 
     if (
       error.code === 4001 ||
@@ -655,7 +988,8 @@ async function scanBeeper() {
     );
 
 
-    scanBtn.disabled = false;
+    scanBtn.disabled =
+      false;
 
     scanBtn.textContent =
       "SCAN";
@@ -696,6 +1030,7 @@ async function updatePoolStatus() {
       poolStatus.textContent =
         "ACTIVE";
 
+
       poolStatus.className =
         "info-value active";
 
@@ -703,6 +1038,7 @@ async function updatePoolStatus() {
 
       poolStatus.textContent =
         "SCANNING";
+
 
       poolStatus.className =
         "info-value";
@@ -747,7 +1083,9 @@ function setScreen(
   );
 
 
-  if (type === "scanning") {
+  if (
+    type === "scanning"
+  ) {
 
     scannerCard.classList.add(
       "scanning"
@@ -756,7 +1094,9 @@ function setScreen(
   }
 
 
-  if (type === "success") {
+  if (
+    type === "success"
+  ) {
 
     screenStatus.style.color =
       "#14200f";
@@ -764,7 +1104,9 @@ function setScreen(
   }
 
 
-  if (type === "error") {
+  if (
+    type === "error"
+  ) {
 
     screenStatus.style.color =
       "#172011";
@@ -851,15 +1193,25 @@ if (window.ethereum) {
         accounts.length === 0
       ) {
 
-        userAddress = null;
+        userAddress =
+          null;
 
-        contract = null;
+        contract =
+          null;
 
-        signer = null;
+        signer =
+          null;
+
+        userBeepers =
+          [];
+
+        selectedTokenId =
+          null;
 
 
         connectBtn.textContent =
           "CONNECT WALLET";
+
 
         connectBtn.classList.remove(
           "connected"
@@ -876,18 +1228,61 @@ if (window.ethereum) {
           "idle"
         );
 
+
       } else {
+
+        // Reconnect with new account
 
         userAddress =
           accounts[0];
 
 
         walletAddress.textContent =
-          shortAddress(userAddress);
+          shortAddress(
+            userAddress
+          );
 
 
         connectBtn.textContent =
-          shortAddress(userAddress);
+          shortAddress(
+            userAddress
+          );
+
+
+        if (contract) {
+
+          try {
+
+            await loadUserBeepers();
+
+
+            if (
+              userBeepers.length > 0
+            ) {
+
+              setScreen(
+                "READY",
+                "SELECT A BEEPER TO SCAN",
+                "success"
+              );
+
+            } else {
+
+              setScreen(
+                "NO BEEPERS",
+                "NO BEEPERS DETECTED",
+                "error"
+              );
+
+            }
+
+          } catch (error) {
+
+            console.error(error);
+
+          }
+
+        }
 
       }
 
